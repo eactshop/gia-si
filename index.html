@@ -395,6 +395,16 @@ body::before{
 .aitem-tiers{font-size:12px;color:var(--peach);font-weight:700;margin-top:3px;line-height:1.6}
 .aitem-actions{flex-shrink:0;display:flex;gap:6px}
 
+/* CAT CHIPS (admin) */
+.cat-chip{
+  padding:6px 14px;border-radius:50px;border:2px solid var(--peach-lt);
+  background:var(--white);color:var(--muted);
+  font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;
+  cursor:pointer;transition:all .18s;
+}
+.cat-chip:hover{border-color:var(--peach);color:var(--peach)}
+.cat-chip.sel{background:var(--peach);color:#fff;border-color:var(--peach)}
+
 /* PASS SECTION */
 .pass-card{
   background:var(--lav-lt);border:2px solid var(--lav);
@@ -517,20 +527,20 @@ body::before{
           <input type="text" id="pName" placeholder="VD: Bóng cao su siêu bền...">
         </div>
         <div class="fg">
-          <label>Danh mục</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <select id="pCat" onchange="onCatChange(this)" style="flex:1">
-              <option value="">— Chọn danh mục —</option>
-              <option value="Chó">🐶 Chó</option>
-              <option value="Mèo">🐱 Mèo</option>
-              <option value="Thức ăn">🍖 Thức ăn</option>
-              <option value="Đồ chơi">🎾 Đồ chơi</option>
-              <option value="Phụ kiện">🎀 Phụ kiện</option>
-              <option value="Vệ sinh">🛁 Vệ sinh</option>
-              <option value="__custom__">✏️ Nhập tùy chỉnh...</option>
-            </select>
+          <label>Danh mục <span style="font-weight:700;color:var(--muted);text-transform:none;letter-spacing:0">(chọn nhiều)</span></label>
+          <div id="catChips" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px">
+            <button type="button" class="cat-chip" data-val="Chó" onclick="toggleCat(this)">🐶 Chó</button>
+            <button type="button" class="cat-chip" data-val="Mèo" onclick="toggleCat(this)">🐱 Mèo</button>
+            <button type="button" class="cat-chip" data-val="Thức ăn" onclick="toggleCat(this)">🍖 Thức ăn</button>
+            <button type="button" class="cat-chip" data-val="Đồ chơi" onclick="toggleCat(this)">🎾 Đồ chơi</button>
+            <button type="button" class="cat-chip" data-val="Phụ kiện" onclick="toggleCat(this)">🎀 Phụ kiện</button>
+            <button type="button" class="cat-chip" data-val="Vệ sinh" onclick="toggleCat(this)">🛁 Vệ sinh</button>
           </div>
-          <input type="text" id="pCatCustom" placeholder="Nhập tên danh mục..." style="display:none;margin-top:7px">
+          <div style="display:flex;gap:7px;align-items:center">
+            <input type="text" id="pCatCustom" placeholder="✏️ Thêm danh mục khác..." style="flex:1">
+            <button type="button" onclick="addCustomCat()" style="padding:9px 14px;background:var(--mint-bg);border:2px solid var(--mint-lt);border-radius:50px;color:var(--mint);font-family:'Nunito',sans-serif;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap">＋ Thêm</button>
+          </div>
+          <div id="catSelected" style="font-size:11px;color:var(--muted);font-weight:700;margin-top:7px;min-height:16px"></div>
         </div>
       </div>
       <div class="fg">
@@ -722,15 +732,15 @@ function previewImg(e){
 // ── ADD PRODUCT ──
 function addProduct(){
   const name=document.getElementById('pName').value.trim();
-  const catSel=document.getElementById('pCat').value;
-  const cat=catSel==='__custom__'?document.getElementById('pCatCustom').value.trim():catSel;
+  const cats=getSelectedCats();
+  const cat=cats.join(', ');
   const desc=document.getElementById('pDesc').value.trim();
   const retail=parseInt(document.getElementById('pRetail').value)||0;
   const unit=document.getElementById('tierUnit').value||'cái';
   const tiers=getTiers();
   if(!name){toast('⚠️ Nhập tên sản phẩm!','#e55');return}
   if(!tiers){toast('⚠️ Cần ít nhất 1 mức giá hợp lệ!','#e55');return}
-  products.unshift({id:Date.now(),name,cat,desc,retail,tiers,unit,img:imgData,likes:0});
+  products.unshift({id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img:imgData,likes:0});
   save(); resetForm(); renderAdmin(); updateCounter();
   toast('🐾 Đã thêm sản phẩm thành công!');
 }
@@ -742,10 +752,9 @@ function deleteProduct(id){
 }
 function save(){ localStorage.setItem('pawfect_prods',JSON.stringify(products)) }
 function resetForm(){
-  ['pName','pDesc','pRetail'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('pCat').value='';
-  document.getElementById('pCatCustom').value='';
-  document.getElementById('pCatCustom').style.display='none';
+  ['pName','pDesc','pRetail','pCatCustom'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('#catChips .cat-chip').forEach(c=>c.classList.remove('sel'));
+  updateCatSelected();
   document.getElementById('tierUnit').value='cái';
   updateTierHeader();
   document.getElementById('tierRows').innerHTML='';
@@ -779,10 +788,12 @@ function applyFilters(){ renderShop() }
 // ── RENDER SHOP ──
 function renderShop(){
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
-  const list=products.filter(p=>
-    (!filterCat||p.cat.toLowerCase().includes(filterCat.toLowerCase())) &&
-    (p.name.toLowerCase().includes(q)||(p.desc||'').toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q))
-  );
+  const list=products.filter(p=>{
+    const pCats=(p.cats||[p.cat]).map(c=>(c||'').toLowerCase());
+    const matchCat=!filterCat||pCats.some(c=>c.includes(filterCat.toLowerCase()));
+    const matchQ=p.name.toLowerCase().includes(q)||(p.desc||'').toLowerCase().includes(q)||(p.cat||'').toLowerCase().includes(q);
+    return matchCat&&matchQ;
+  });
   const grid=document.getElementById('shopGrid');
   if(!list.length){
     grid.innerHTML=`<div class="empty">
@@ -794,7 +805,7 @@ function renderShop(){
     <div class="pcard" style="animation-delay:${i*.06}s" onclick="openModal(${p.id})">
       <div class="pcard-img-wrap">
         <img src="${p.img||PH_SQ}" alt="${p.name}" loading="lazy">
-        ${p.cat?`<span class="pcard-badge">${p.cat}</span>`:''}
+        ${(p.cats&&p.cats.length?p.cats:[p.cat]).filter(Boolean).map((c,i)=>`<span class="pcard-badge" style="top:${10+i*28}px">${c}</span>`).join('')}
         <button class="pcard-heart" onclick="event.stopPropagation();likeIt(${p.id},this)">🤍</button>
       </div>
       <div class="pcard-body">
@@ -825,7 +836,7 @@ function renderAdmin(){
     return `<div class="aitem">
       <img src="${p.img||PH_SM}" alt="${p.name}">
       <div class="aitem-info">
-        <div class="aitem-name">${p.name} ${p.cat?`<span style="font-size:11px;color:var(--muted);font-weight:700">[${p.cat}]</span>`:''}</div>
+        <div class="aitem-name">${p.name} ${(p.cats&&p.cats.length?p.cats:[p.cat]).filter(Boolean).map(c=>`<span style="font-size:11px;color:var(--muted);font-weight:700">[${c}]</span>`).join(' ')}</div>
         <div class="aitem-tiers">${ts}</div>
       </div>
       <div class="aitem-actions">
@@ -852,7 +863,7 @@ function openModal(id){
   document.getElementById('modalEl').innerHTML=`
     <img class="modal-img" src="${p.img||PH_RECT}" alt="${p.name}">
     <div class="modal-body">
-      ${p.cat?`<span class="modal-cat">${p.cat}</span>`:''}
+      ${(p.cats&&p.cats.length?p.cats:[p.cat]).filter(Boolean).map(c=>`<span class="modal-cat">${c}</span>`).join(' ')}
       <div class="modal-name">${p.name}</div>
       ${p.desc?`<div class="modal-desc">${p.desc}</div>`:''}
       <div class="ptable-title">Bảng giá sỉ theo số lượng</div>
@@ -881,10 +892,32 @@ function updateTierHeader(){
   document.getElementById('tierHd').innerHTML=
     `<span>Từ (${u})</span><span>Đến (${u})</span><span>Giá / ${u} (₫)</span><span></span>`;
 }
-function onCatChange(sel){
-  const custom=document.getElementById('pCatCustom');
-  if(sel.value==='__custom__'){custom.style.display='';custom.focus()}
-  else custom.style.display='none';
+
+// ── CATEGORY MULTI-SELECT ──
+function toggleCat(btn){
+  btn.classList.toggle('sel');
+  updateCatSelected();
+}
+function addCustomCat(){
+  const inp=document.getElementById('pCatCustom');
+  const val=inp.value.trim(); if(!val)return;
+  // Check if already exists
+  const existing=[...document.querySelectorAll('#catChips .cat-chip')].find(c=>c.dataset.val===val);
+  if(existing){existing.classList.add('sel');inp.value='';updateCatSelected();return;}
+  const btn=document.createElement('button');
+  btn.type='button'; btn.className='cat-chip sel';
+  btn.dataset.val=val; btn.textContent='✏️ '+val;
+  btn.onclick=()=>toggleCat(btn);
+  document.getElementById('catChips').appendChild(btn);
+  inp.value=''; updateCatSelected();
+}
+function getSelectedCats(){
+  return [...document.querySelectorAll('#catChips .cat-chip.sel')].map(c=>c.dataset.val);
+}
+function updateCatSelected(){
+  const cats=getSelectedCats();
+  const el=document.getElementById('catSelected');
+  el.textContent=cats.length?'✅ Đã chọn: '+cats.join(' · '):'Chưa chọn danh mục nào';
 }
 
 // ── INIT ──
