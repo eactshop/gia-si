@@ -628,7 +628,7 @@ body::before{
 
 <script>
 // ── STATE ──
-const API = 'https://script.google.com/macros/s/AKfycbzK4KrVh8WVV3IoirmGl8gejCuf9kXhF9BgKFqh31YDuRC0SMi8SOM7v9gw4__JoFKV/exec';
+const API = 'https://script.google.com/macros/s/AKfycbz2lt6avACh1INohSd8NQolvrSe8yv8rkoVTfPVJFvnBZCNSr05Prlipm-vA6VRjZKd/exec';
 let products = [];
 let imgData = '';
 let isAdmin = false;
@@ -736,9 +736,21 @@ function driveUrl(url){
 
 // ── API HELPERS ──
 async function apiGet(params){
-  const url=API+'?'+new URLSearchParams(params);
-  const res=await fetch(url);
-  return res.json();
+
+  const url = API + '?' + new URLSearchParams(params);
+
+  const r = await fetch(url, {
+    method: "GET",
+    mode: "no-cors"
+  });
+
+  const text = await r.text();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return [];
+  }
 }
 
 // ── ADD PRODUCT ──
