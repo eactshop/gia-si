@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🐾 Pawfect Shop — Đồ Thú Cưng</title>
+<title>🐾 Teebong Shop — Đồ Thú Cưng</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -625,7 +625,7 @@ body::before{
 
 <script>
 // ── STATE ──
-const API = 'https://script.google.com/macros/s/AKfycbzgrmpPLRqOW8bJbJihcJjIy-BGsyDiwCE4-puVueLTQnpD8yfSfNCejVU-vubfFk45/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzC0rkCee6lIif3hbVgUoPP4NNhV7l6HzDE2PUTf4xMD0l-DJVrR3htPmgzI36O-q95/exec';
 let products = [];
 let imgData = '';
 let isAdmin = false;
@@ -730,6 +730,13 @@ function previewImg(e){
   fr.readAsDataURL(file);
 }
 
+// ── API HELPERS ──
+async function apiGet(params){
+  const url=API+'?'+new URLSearchParams(params);
+  const res=await fetch(url);
+  return res.json();
+}
+
 // ── ADD PRODUCT ──
 async function addProduct(){
   const name=document.getElementById('pName').value.trim();
@@ -744,7 +751,7 @@ async function addProduct(){
   const p={id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img:imgData,likes:0};
   toast('⏳ Đang lưu...','var(--muted)');
   try{
-    await fetch(API,{method:'POST',body:JSON.stringify({action:'add',product:p})});
+    await apiGet({action:'add', data: encodeURIComponent(JSON.stringify(p))});
     products.unshift(p);
     resetForm(); renderAdmin(); renderShop(); updateCounter();
     toast('🐾 Đã thêm sản phẩm thành công!');
@@ -754,7 +761,7 @@ async function deleteProduct(id){
   if(!confirm('Xóa sản phẩm này?'))return;
   toast('⏳ Đang xóa...','var(--muted)');
   try{
-    await fetch(API,{method:'POST',body:JSON.stringify({action:'delete',id})});
+    await apiGet({action:'delete', id});
     products=products.filter(p=>p.id!==id);
     renderAdmin(); renderShop(); updateCounter();
     toast('🗑️ Đã xóa','var(--muted)');
@@ -764,8 +771,8 @@ async function loadProducts(){
   const grid=document.getElementById('shopGrid');
   grid.innerHTML=`<div class="empty"><div class="big">⏳</div><p>Đang tải sản phẩm...</p></div>`;
   try{
-    const res=await fetch(API+'?action=list');
-    products=await res.json();
+    products=await apiGet({action:'list'});
+    if(!Array.isArray(products)) products=[];
     renderShop(); renderAdmin(); updateCounter();
   }catch(e){
     grid.innerHTML=`<div class="empty"><div class="big">😿</div><p>Không tải được dữ liệu. Thử lại sau!</p></div>`;
