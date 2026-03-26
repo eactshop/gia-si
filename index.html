@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🐾 Teebong Shop — Đồ Thú Cưng</title>
+<title>🐾 Pawfect Shop — Đồ Thú Cưng</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Baloo+2:wght@700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -625,7 +625,7 @@ body::before{
 
 <script>
 // ── STATE ──
-const API = 'https://script.google.com/macros/s/AKfycbzC0rkCee6lIif3hbVgUoPP4NNhV7l6HzDE2PUTf4xMD0l-DJVrR3htPmgzI36O-q95/exec';
+const API = 'https://script.google.com/macros/s/AKfycbzK4KrVh8WVV3IoirmGl8gejCuf9kXhF9BgKFqh31YDuRC0SMi8SOM7v9gw4__JoFKV/exec';
 let products = [];
 let imgData = '';
 let isAdmin = false;
@@ -737,6 +737,21 @@ async function apiGet(params){
   return res.json();
 }
 
+// Upload ảnh base64 lên Drive theo từng chunk (mỗi chunk ~50KB)
+async function uploadImgToDrive(pid, b64full, mime){
+  const CHUNK=50000; // ký tự
+  const total=Math.ceil(b64full.length/CHUNK);
+  for(let i=0;i<total;i++){
+    const chunk=b64full.slice(i*CHUNK,(i+1)*CHUNK);
+    const name=`${pid}_${total}_${i}`;
+    const res=await apiGet({action:'uploadImg',name,b64:chunk,mime});
+    if(i===total-1){
+      if(res.url) return res.url;
+      throw new Error(res.error||'Upload failed');
+    }
+  }
+}
+
 // ── ADD PRODUCT ──
 async function addProduct(){
   const name=document.getElementById('pName').value.trim();
@@ -748,14 +763,25 @@ async function addProduct(){
   const tiers=getTiers();
   if(!name){toast('⚠️ Nhập tên sản phẩm!','#e55');return}
   if(!tiers){toast('⚠️ Cần ít nhất 1 mức giá hợp lệ!','#e55');return}
-  const p={id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img:imgData,likes:0};
-  toast('⏳ Đang lưu...','var(--muted)');
+  const pid=Date.now();
+  let imgUrl='';
   try{
-    await apiGet({action:'add', data: encodeURIComponent(JSON.stringify(p))});
+    if(imgData){
+      toast('⏳ Đang upload ảnh...','var(--muted)');
+      // Tách phần base64 thuần (bỏ "data:image/xxx;base64,")
+      const mime=imgData.split(';')[0].split(':')[1];
+      const b64=imgData.split(',')[1];
+      imgUrl=await uploadImgToDrive(pid,b64,mime);
+    }
+    toast('⏳ Đang lưu sản phẩm...','var(--muted)');
+    const p={id:pid,name,cat,cats,desc,retail,tiers,unit,img:imgUrl,likes:0};
+    await apiGet({action:'add', data:encodeURIComponent(JSON.stringify(p))});
+    // Hiển thị ngay với ảnh local để UX mượt
+    p.img=imgUrl||imgData;
     products.unshift(p);
     resetForm(); renderAdmin(); renderShop(); updateCounter();
     toast('🐾 Đã thêm sản phẩm thành công!');
-  }catch(e){ toast('❌ Lỗi kết nối!','#e55'); }
+  }catch(e){ toast('❌ Lỗi: '+e.message,'#e55'); }
 }
 async function deleteProduct(id){
   if(!confirm('Xóa sản phẩm này?'))return;
