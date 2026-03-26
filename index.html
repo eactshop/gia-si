@@ -757,7 +757,7 @@ async function addProduct(){
   const p={id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img,likes:0};
   toast('⏳ Đang lưu...','var(--muted)');
   try{
-    await apiGet({action:'add', data:encodeURIComponent(JSON.stringify(p))});
+    await apiGet({action:'add', data:JSON.stringify(p)});
     products.unshift(p);
     resetForm(); renderAdmin(); renderShop(); updateCounter();
     toast('🐾 Đã thêm sản phẩm thành công!');
