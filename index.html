@@ -625,7 +625,8 @@ body::before{
 
 <script>
 // ── STATE ──
-let products = JSON.parse(localStorage.getItem('pawfect_prods') || '[]');
+const API = 'https://script.google.com/macros/s/AKfycbzgrmpPLRqOW8bJbJihcJjIy-BGsyDiwCE4-puVueLTQnpD8yfSfNCejVU-vubfFk45/exec';
+let products = [];
 let imgData = '';
 let isAdmin = false;
 let filterCat = '';
@@ -730,7 +731,7 @@ function previewImg(e){
 }
 
 // ── ADD PRODUCT ──
-function addProduct(){
+async function addProduct(){
   const name=document.getElementById('pName').value.trim();
   const cats=getSelectedCats();
   const cat=cats.join(', ');
@@ -740,17 +741,36 @@ function addProduct(){
   const tiers=getTiers();
   if(!name){toast('⚠️ Nhập tên sản phẩm!','#e55');return}
   if(!tiers){toast('⚠️ Cần ít nhất 1 mức giá hợp lệ!','#e55');return}
-  products.unshift({id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img:imgData,likes:0});
-  save(); resetForm(); renderAdmin(); updateCounter();
-  toast('🐾 Đã thêm sản phẩm thành công!');
+  const p={id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img:imgData,likes:0};
+  toast('⏳ Đang lưu...','var(--muted)');
+  try{
+    await fetch(API,{method:'POST',body:JSON.stringify({action:'add',product:p})});
+    products.unshift(p);
+    resetForm(); renderAdmin(); renderShop(); updateCounter();
+    toast('🐾 Đã thêm sản phẩm thành công!');
+  }catch(e){ toast('❌ Lỗi kết nối!','#e55'); }
 }
-function deleteProduct(id){
+async function deleteProduct(id){
   if(!confirm('Xóa sản phẩm này?'))return;
-  products=products.filter(p=>p.id!==id);
-  save(); renderAdmin(); renderShop(); updateCounter();
-  toast('🗑️ Đã xóa','var(--muted)');
+  toast('⏳ Đang xóa...','var(--muted)');
+  try{
+    await fetch(API,{method:'POST',body:JSON.stringify({action:'delete',id})});
+    products=products.filter(p=>p.id!==id);
+    renderAdmin(); renderShop(); updateCounter();
+    toast('🗑️ Đã xóa','var(--muted)');
+  }catch(e){ toast('❌ Lỗi kết nối!','#e55'); }
 }
-function save(){ localStorage.setItem('pawfect_prods',JSON.stringify(products)) }
+async function loadProducts(){
+  const grid=document.getElementById('shopGrid');
+  grid.innerHTML=`<div class="empty"><div class="big">⏳</div><p>Đang tải sản phẩm...</p></div>`;
+  try{
+    const res=await fetch(API+'?action=list');
+    products=await res.json();
+    renderShop(); renderAdmin(); updateCounter();
+  }catch(e){
+    grid.innerHTML=`<div class="empty"><div class="big">😿</div><p>Không tải được dữ liệu. Thử lại sau!</p></div>`;
+  }
+}
 function resetForm(){
   ['pName','pDesc','pRetail','pCatCustom'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('#catChips .cat-chip').forEach(c=>c.classList.remove('sel'));
@@ -922,7 +942,7 @@ function updateCatSelected(){
 
 // ── INIT ──
 addTierRow(1,9,''); addTierRow(10,'','');
-renderShop(); updateCounter();
+loadProducts();
 </script>
 </body>
 </html>
