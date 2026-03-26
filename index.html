@@ -577,12 +577,15 @@ body::before{
       </div>
 
       <div class="fg">
-        <label>📷 Hình ảnh sản phẩm</label>
-        <div class="upload-zone" id="uploadZone">
-          <input type="file" id="pImg" accept="image/*" onchange="previewImg(event)">
-          <div class="uz-emoji">📷</div>
-          <p>Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
-          <img class="preview-img" id="previewImgEl" style="display:none">
+        <label>🖼️ Link ảnh Google Drive</label>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:1">
+            <input type="text" id="pImg" placeholder="Dán link ảnh Google Drive vào đây..." oninput="previewImg(this.value)" style="width:100%">
+            <div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:6px">
+              💡 Lấy link: Drive → chuột phải ảnh → <b>Chia sẻ</b> → <b>Bất kỳ ai có đường liên kết</b> → Copy link
+            </div>
+          </div>
+          <img id="previewImgEl" style="display:none;width:80px;height:80px;object-fit:cover;border-radius:12px;border:2px solid var(--peach-lt);flex-shrink:0">
         </div>
       </div>
       <button class="btn btn-primary" onclick="addProduct()">🐾 Thêm Sản Phẩm</button>
@@ -716,18 +719,19 @@ function getTiers(){
   return tiers.sort((a,b)=>a.from-b.from);
 }
 
-// ── IMAGE ──
-function previewImg(e){
-  const file=e.target.files[0]; if(!file)return;
-  const fr=new FileReader();
-  fr.onload=ev=>{
-    imgData=ev.target.result;
-    const img=document.getElementById('previewImgEl');
-    img.src=imgData; img.style.display='block';
-    document.querySelector('#uploadZone .uz-emoji').style.display='none';
-    document.querySelector('#uploadZone p').style.display='none';
-  };
-  fr.readAsDataURL(file);
+// ── IMAGE PREVIEW ──
+function previewImg(url){
+  if(!url){document.getElementById('previewImgEl').style.display='none';return;}
+  const imgUrl=driveUrl(url);
+  const el=document.getElementById('previewImgEl');
+  el.src=imgUrl; el.style.display='block';
+}
+function driveUrl(url){
+  // Chuyển link share Drive → link ảnh trực tiếp
+  if(!url) return '';
+  const m=url.match(/\/d\/([^/]+)/)||url.match(/id=([^&]+)/);
+  if(m) return 'https://drive.google.com/thumbnail?id='+m[1]+'&sz=w600';
+  return url; // link thường thì dùng thẳng
 }
 
 // ── API HELPERS ──
@@ -735,21 +739,6 @@ async function apiGet(params){
   const url=API+'?'+new URLSearchParams(params);
   const res=await fetch(url);
   return res.json();
-}
-
-// Upload ảnh base64 lên Drive theo từng chunk (mỗi chunk ~50KB)
-async function uploadImgToDrive(pid, b64full, mime){
-  const CHUNK=50000; // ký tự
-  const total=Math.ceil(b64full.length/CHUNK);
-  for(let i=0;i<total;i++){
-    const chunk=b64full.slice(i*CHUNK,(i+1)*CHUNK);
-    const name=`${pid}_${total}_${i}`;
-    const res=await apiGet({action:'uploadImg',name,b64:chunk,mime});
-    if(i===total-1){
-      if(res.url) return res.url;
-      throw new Error(res.error||'Upload failed');
-    }
-  }
 }
 
 // ── ADD PRODUCT ──
@@ -761,27 +750,18 @@ async function addProduct(){
   const retail=parseInt(document.getElementById('pRetail').value)||0;
   const unit=document.getElementById('tierUnit').value||'cái';
   const tiers=getTiers();
+  const imgRaw=document.getElementById('pImg').value.trim();
+  const img=driveUrl(imgRaw);
   if(!name){toast('⚠️ Nhập tên sản phẩm!','#e55');return}
   if(!tiers){toast('⚠️ Cần ít nhất 1 mức giá hợp lệ!','#e55');return}
-  const pid=Date.now();
-  let imgUrl='';
+  const p={id:Date.now(),name,cat,cats,desc,retail,tiers,unit,img,likes:0};
+  toast('⏳ Đang lưu...','var(--muted)');
   try{
-    if(imgData){
-      toast('⏳ Đang upload ảnh...','var(--muted)');
-      // Tách phần base64 thuần (bỏ "data:image/xxx;base64,")
-      const mime=imgData.split(';')[0].split(':')[1];
-      const b64=imgData.split(',')[1];
-      imgUrl=await uploadImgToDrive(pid,b64,mime);
-    }
-    toast('⏳ Đang lưu sản phẩm...','var(--muted)');
-    const p={id:pid,name,cat,cats,desc,retail,tiers,unit,img:imgUrl,likes:0};
     await apiGet({action:'add', data:encodeURIComponent(JSON.stringify(p))});
-    // Hiển thị ngay với ảnh local để UX mượt
-    p.img=imgUrl||imgData;
     products.unshift(p);
     resetForm(); renderAdmin(); renderShop(); updateCounter();
     toast('🐾 Đã thêm sản phẩm thành công!');
-  }catch(e){ toast('❌ Lỗi: '+e.message,'#e55'); }
+  }catch(e){ toast('❌ Lỗi kết nối!','#e55'); }
 }
 async function deleteProduct(id){
   if(!confirm('Xóa sản phẩm này?'))return;
@@ -805,7 +785,8 @@ async function loadProducts(){
   }
 }
 function resetForm(){
-  ['pName','pDesc','pRetail','pCatCustom'].forEach(id=>document.getElementById(id).value='');
+  ['pName','pDesc','pRetail','pCatCustom','pImg'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('previewImgEl').style.display='none';
   document.querySelectorAll('#catChips .cat-chip').forEach(c=>c.classList.remove('sel'));
   updateCatSelected();
   document.getElementById('tierUnit').value='cái';
@@ -813,10 +794,6 @@ function resetForm(){
   document.getElementById('tierRows').innerHTML='';
   addTierRow(1,9,''); addTierRow(10,'','');
   imgData='';
-  document.getElementById('previewImgEl').style.display='none';
-  document.querySelector('#uploadZone .uz-emoji').style.display='';
-  document.querySelector('#uploadZone p').style.display='';
-  document.getElementById('pImg').value='';
 }
 
 // ── FORMAT ──
